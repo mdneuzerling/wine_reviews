@@ -1,15 +1,11 @@
-library(tidyverse)
-library(e1071)
-library(visdat)
-library(naniar)
-library(corrplot)
 
-wine <- read.csv(
-    "wine_reviews.csv"
-)
+
 
 #' Will take a minute
 vis_dat(wine, warn_large_data = FALSE)
+
+wine %>% ggplot(aes(x = points)) + 
+    geom_histogram(bins = nrow(wine %>% distinct(points)))
 
 wine %>% 
     group_by(variety) %>% 

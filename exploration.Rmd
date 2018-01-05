@@ -1,0 +1,75 @@
+---
+title: "Wine reviews"
+author: "mdneuzerling"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(e1071)
+library(visdat)
+library(naniar)
+library(corrplot)
+library(tidytext)
+data("stop_words")
+library(wordcloud)
+
+wine <- read_csv(
+    paste0(Sys.getenv("GITHUB"), "/wine_reviews/wine_reviews.csv")
+)
+
+#wine <- read.csv (
+#    paste0(Sys.getenv("GITHUB"), "/wine_reviews/wine_reviews.csv"),
+#    stringsAsFactors = FALSE
+#)
+#    mutate_all(funs(replace(., . == "", NA))) %>% 
+#    vis_dat(warn_large_data = FALSE)
+```
+
+## Incomplete data
+
+From the data viusalisation below, we can see that the price data for the wine
+is incomplete. Approximately `r round(100 * prop_miss(wine$price))`% of the 
+price values are missing. The other missing values are actually empty strings.
+Interestingly, a data frame doesn't treat these as missing by default, but a 
+tibble does.
+
+```{r vis_dat, cache = TRUE}
+wine %>% vis_dat(warn_large_data = FALSE)
+```
+
+We might be tempted to say that the rest of our data is complete. However, many
+values are empty strings. If we replace these empty strings with `NA`, we can
+see how incomplete the data really is. Fortunately, not all of these variables
+will be useful in predicting wine quality (for example, `taster_twitter_handle`).
+
+## Text analysis
+
+```{r}
+wine_words <- wine %>% 
+    select(X1, description) %>%
+    unnest_tokens(word, description) %>% 
+    anti_join(stop_words, by = "word") %>% 
+    filter(word != "wine")
+
+wine_words %>%
+    count(word, sort = TRUE) %>%
+    head(20) %>%
+    mutate(word = reorder(word, n)) %>%
+    ggplot(aes(word, n)) +
+    geom_col() +
+    xlab(NULL) +
+    theme(text = element_text(size=16)) +
+    coord_flip()
+```
+
+```{r}
+wine_words %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+```
+
+
