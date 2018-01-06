@@ -48,28 +48,107 @@ will be useful in predicting wine quality (for example, `taster_twitter_handle`)
 
 ## Text analysis
 
-```{r}
+Each wine is accompanied by a single-paragraph review. Using the tidytext 
+package we can investigate word and n-gram frequency of these reviews. We first
+break down the review into single words.
+
+```{r cache = TRUE}
 wine_words <- wine %>% 
-    select(X1, description) %>%
     unnest_tokens(word, description) %>% 
     anti_join(stop_words, by = "word") %>% 
     filter(word != "wine")
+```
 
+We can now generate a simple plot of the ten most commonly occurring words. Some
+words, such as "the" and "a", occur frequently and serve only a grammatical
+purpose, and so are excluded. We also eclude the word "wine", since the presence
+of this word doesn't tell us much about the interview.
+
+```{r}
 wine_words %>%
     count(word, sort = TRUE) %>%
     head(20) %>%
     mutate(word = reorder(word, n)) %>%
     ggplot(aes(word, n)) +
-    geom_col() +
+    geom_col(fill = "maroon4") +
     xlab(NULL) +
     theme(text = element_text(size=16)) +
     coord_flip()
 ```
+
+I'm not sure what purpose word clouds serve, but they seem mandatory at this
+point.
 
 ```{r}
 wine_words %>%
   count(word) %>%
   with(wordcloud(word, n, max.words = 100))
 ```
+
+An n-gram is a tuple of words appearing sequentially in order within an 
+utterance. For example, in the utterance "My name is Fred", "is Fred" is a 
+2-gram and "name is Fred" is a 3-gram. A word could also be considered as a
+1-gram. Below we define the 2-grams (bigrams) and 3-grams (trigrams) of the wine 
+descriptions. 
+
+Along with the `ngram` column, the `separate` column provides us
+with separate columns for each word in the n-gram. The column names for these
+words are dynamically generated in the `wine_ngrams` helper function, which
+provides outputs a tibble of n-grams for a given n. We then use these new
+word columns to filter out the stop words, although this time we include n-grams
+with the word "wine".
+
+```{r cache = TRUE}
+wine_ngrams <- function(n) {
+    wine %>%  
+        unnest_tokens(ngram, description, token = "ngrams", n = n) %>% 
+        separate(
+            ngram, 
+            sapply(1:n, function(x) {paste0("word", x)}), # eg, "word1", "word2" 
+            sep = " ",
+            remove = FALSE # keep the n-gram in the tibble
+        )
+}
+
+wine_2grams <- wine_ngrams(2) %>% 
+    filter(!word1 %in% stop_words$word) %>%
+    filter(!word2 %in% stop_words$word)
+wine_3grams <- wine_ngrams(3) %>% 
+    filter(!word1 %in% stop_words$word) %>%
+    filter(!word2 %in% stop_words$word) %>% 
+    filter(!word3 %in% stop_words$word)
+```
+
+There are `r nrow(wine_2grams)` 2-grams, taking up around 
+`r round(as.numeric(object.size(wine_2grams)) / 1024^2)` megabytes of memory, 
+and `r nrow(wine_3grams)` 3-grams, taking up around 
+`r round(as.numeric(object.size(wine_3grams)) / 1024^2)` megabytes. The drop in
+number and size is due to the filtering of the stop words.
+
+We can also plot the frequency of the 2- and 3-grams:
+
+```{r}
+plot_ngram_frequency <- function(x) {
+    get(paste0("wine_", x, "grams")) %>%
+        count(ngram, sort = TRUE) %>%
+        head(20) %>%
+        mutate(ngram = reorder(ngram, n)) %>%
+        ggplot(aes(ngram, n)) +
+        geom_col(fill = "maroon4") +
+        xlab(NULL) +
+        theme(text = element_text(size=16)) +
+        coord_flip() + 
+        ggtitle(paste0("Frequency of ", x, "-grams"))
+}
+
+plot_ngram_frequency(2)
+plot_ngram_frequency(3)
+```
+
+
+
+
+
+
 
 
