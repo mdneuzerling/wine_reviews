@@ -3,7 +3,6 @@
 
 # cache folder
 exploration_cache/
-exploration_files/
 
 # History files
 .Rhistory
