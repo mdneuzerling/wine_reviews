@@ -2,6 +2,7 @@ library(tidyverse)
 library(tidytext)
 data("stop_words")
 library(wordcloud)
+library(markovchain)
 
 wine <- read_csv(
     paste0(Sys.getenv("GITHUB"), "/wine_reviews/wine_reviews.csv")
@@ -9,20 +10,14 @@ wine <- read_csv(
 
 wine_words <- wine %>% 
     select(X1, description) %>%
-    unnest_tokens(word, description) %>% 
-    anti_join(stop_words)
+    unnest_tokens(word, description)
 
-wine_words %>%
-    count(word, sort = TRUE) %>%
-    head(20) %>%
-    mutate(word = reorder(word, n)) %>%
-    ggplot(aes(word, n)) +
-    geom_col() +
-    xlab(NULL) +
-    theme(text = element_text(size=1S6)) +
-    coord_flip()
+#' Using just the first 1000 wine reviews takes a few minutes and roughly half
+#' a gigabyte of RAM. I don't want to even think about training on all 130K
+#' reviews.
+fit <- markovchainFit(data = (wine_words %>% filter(X1 <= 1000))$word)
 
-wine_words %>%
-  count(word) %>%
-  with(wordcloud(word, n, max.words = 100))
-
+gen_review <- function() {
+    markovchainSequence(n = 50, markovchain = fit$estimate) %>% 
+        paste0(collapse = ' ')
+}
