@@ -61,8 +61,8 @@ wine_words <- wine %>%
 
 We can now generate a simple plot of the ten most commonly occurring words. Some
 words, such as "the" and "a", occur frequently and serve only a grammatical
-purpose, and so are excluded. We also eclude the word "wine", since the presence
-of this word doesn't tell us much about the interview.
+purpose, and so are excluded. We also exclude the word "wine", since the presence
+of this word doesn't tell us much about the review.
 
 ```{r}
 wine_words %>%
