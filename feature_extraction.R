@@ -1,12 +1,34 @@
 library(tidyverse)
 library(tidytext)
 library(WikipediR)
-library(XML)
 data("stop_words")
 
 wine <- read_csv(
     paste0(Sys.getenv("GITHUB"), "/wine_reviews/wine_reviews.csv")
 )
+varieties <- read_csv(
+    paste0(Sys.getenv("GITHUB"), "/wine_reviews/varieties.csv")
+)
+
+varieties <- varieties %>% mutate(
+    grape_colour = ifelse(
+        grape_colour == "character(0)",
+        gc(paste0(variety, " (grape)")),
+        grape_colour
+    )
+)
+
+varieties <- varieties %>% mutate(
+    grape_colour = ifelse(grepl("character", grape_colour), NA, grape_colour)
+)
+
+    grape_colour = case_when(
+        grep("stub", grape_colour) ~ NA,
+        grape_colour == "character(0)" ~ NA,
+        TRUE ~ grape_colour
+        )
+    )
+
 
 wine_words <- wine %>% 
     select(X1, description) %>%
