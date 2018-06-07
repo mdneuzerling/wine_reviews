@@ -6,27 +6,20 @@ output: html_document
 ---
 
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+ 
 library(tidyverse)
+library(kableExtra)
 library(e1071)
 library(visdat)
 library(naniar)
-library(corrplot)
 library(tidytext)
-data("stop_words")
 library(wordcloud)
+data("stop_words")
 
-wine <- read_csv(
-    paste0(Sys.getenv("GITHUB"), "/wine_reviews/wine_reviews.csv")
-)
-
-#wine <- read.csv (
-#    paste0(Sys.getenv("GITHUB"), "/wine_reviews/wine_reviews.csv"),
-#    stringsAsFactors = FALSE
-#)
-#    mutate_all(funs(replace(., . == "", NA))) %>% 
-#    vis_dat(warn_large_data = FALSE)
+wine <- "wine_reviews.csv" %>% 
+    read_csv %>% 
+    mutate(variety = variety %>% tolower)
 ```
 
 ## Incomplete data
@@ -38,13 +31,55 @@ Interestingly, a data frame doesn't treat these as missing by default, but a
 tibble does.
 
 ```{r vis_dat, cache = TRUE}
-wine %>% vis_dat(warn_large_data = FALSE)
+wine %>% sample_n(30000) %>% vis_dat
 ```
 
 We might be tempted to say that the rest of our data is complete. However, many
 values are empty strings. If we replace these empty strings with `NA`, we can
 see how incomplete the data really is. Fortunately, not all of these variables
 will be useful in predicting wine quality (for example, `taster_twitter_handle`).
+
+## Grape colours
+
+Import the colours, and change the entries to match the same format as that used
+in the wine reviews: lower-case.
+
+```{r grape_colours, message = FALSE}
+varieties <- "varieties.csv" %>% 
+    read_csv %>% 
+    select(variety, colour) %>% 
+    mutate_all(tolower)
+```    
+
+Now join the colours with the wine data. If there are any missing values, we can
+attempt to fill them in based on obvious clues in the variety (eg. a "Red blend"
+can safely be assumed to be a red wine).
+
+```{r}
+wine <- wine %>% merge(
+    varieties %>% select(variety, colour),
+    by = "variety",
+    all = TRUE
+) %>% 
+    mutate(
+        colour = case_when(
+            !is.na(colour) ~ colour,
+            grepl("red", variety, ignore.case = TRUE) ~ "red",
+            grepl("white", variety, ignore.case = TRUE) ~ "white"
+        )
+    )
+
+wine %>% 
+    count(colour) %>% 
+    knitr::kable(format = "html") %>% 
+    kable_styling(full_width = F)
+```
+
+## Points
+```{r points}
+wine %>% ggplot(aes(x = points)) + 
+    geom_histogram(bins = nrow(wine %>% distinct(points)))
+```
 
 ## Text analysis
 
