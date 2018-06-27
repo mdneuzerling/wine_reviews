@@ -41,14 +41,12 @@ will be useful in predicting wine quality (for example, `taster_twitter_handle`)
 
 ## Grape colours
 
-Import the colours, and change the entries to match the same format as that used
-in the wine reviews: lower-case.
+Import the colours:
 
 ```{r grape_colours, message = FALSE}
 varieties <- "varieties.csv" %>% 
     read_csv %>% 
-    select(variety, colour) %>% 
-    mutate_all(tolower)
+    select(variety, colour)
 ```    
 
 Now join the colours with the wine data. If there are any missing values, we can
