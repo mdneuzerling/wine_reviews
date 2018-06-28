@@ -54,7 +54,7 @@ attempt to fill them in based on obvious clues in the variety (eg. a "Red blend"
 can safely be assumed to be a red wine).
 
 ```{r}
-wine <- wine %>% merge(
+wine_colours <- wine %>% merge(
     varieties %>% select(variety, colour),
     by = "variety",
     all = TRUE
@@ -62,15 +62,24 @@ wine <- wine %>% merge(
     mutate(
         colour = case_when(
             !is.na(colour) ~ colour,
+            grepl("sparkling", variety, ignore.case = TRUE) ~ "white",
+            grepl("champagne", variety, ignore.case = TRUE) ~ "white",
             grepl("red", variety, ignore.case = TRUE) ~ "red",
-            grepl("white", variety, ignore.case = TRUE) ~ "white"
+            grepl("white", variety, ignore.case = TRUE) ~ "white",
+            grepl("rosé", variety, ignore.case = TRUE) ~ "rosé",
+            grepl("rose", variety, ignore.case = TRUE) ~ "rosé",
+            grepl("port", variety, ignore.case = TRUE) ~ "red" # technically?
         )
     )
 
-wine %>% 
+wine_colours %>% 
     count(colour) %>% 
     knitr::kable(format = "html") %>% 
     kable_styling(full_width = F)
+```
+
+```{r missing_colours}
+wine_colours %>% filter(is.na(colour)) %>% count(variety, sort = TRUE)
 ```
 
 ## Points
