@@ -7,8 +7,11 @@ output: html_document
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+
+set.seed(754804) # Chosen by fair dice roll. Guaranteed to be random.
  
 library(tidyverse)
+library(rvest)
 library(kableExtra)
 library(e1071)
 library(visdat)
@@ -41,21 +44,69 @@ will be useful in predicting wine quality (for example, `taster_twitter_handle`)
 
 ## Grape colours
 
-Import the colours:
+In order to classify the wines as red, white or rosé, we're going to scrape
+wine data from the [List of grape varieties](https://en.wikipedia.org/wiki/List_of_grape_varieties)
+Wikipedia page, using the `rvest` package. The first three tables of this page
+give red, white and rosé wines, in that order.
 
-```{r grape_colours, message = FALSE}
-varieties <- "varieties.csv" %>% 
-    read_csv %>% 
-    select(variety, colour)
+```{r grape_colours_wiki_scrape, message = FALSE}
+wiki_tables <- "https://en.wikipedia.org/wiki/List_of_grape_varieties" %>% 
+    read_html %>% 
+    html_nodes("table")
+red_wines <- wiki_tables[[1]] %>% html_table %>% cbind(colour = "red")
+white_wines <- wiki_tables[[2]] %>% html_table %>% cbind(colour = "white")
+rose_wines <- wiki_tables[[3]] %>% html_table %>% cbind(colour = "rosé")
+all_wines <- rbind(red_wines, white_wines, rose_wines)
 ```    
 
-Now join the colours with the wine data. If there are any missing values, we can
-attempt to fill them in based on obvious clues in the variety (eg. a "Red blend"
-can safely be assumed to be a red wine).
+We're interested in three columns here: `Common Name(s)`, `All Synonyms` and
+the `colour` column we defined from the table scraping. We're also going to 
+record `Country of origin` while the opportunity presents itself.
+
+The synonyms are comma-separated strings, ending with periods. Some wines can
+also have multiple common names, eg. "Shiraz / Syrah". We're going to rename the
+columns to match the tidyverse style, combine the common names and synonyms into
+a single `variety` column, and then `unnest` the `variety` column so that each
+common name or synonym is on its own line. Finally we're going to clean the 
+table so that all entries are in lower-case, the results are distinct, and
+certain stray bits of punctuation are removed.
+
+```{r grape_colours_cleaning, message = FALSE}
+variety_colours <- all_wines %>% 
+    rename(
+        variety = `Common Name(s)`,
+        synonyms = `All Synonyms`,
+        country_of_origin = `Country of origin`
+    ) %>% 
+    select(variety, synonyms, country_of_origin, colour) %>% 
+    {rbind(
+        select(., variety, country_of_origin, colour),
+        rename(select(., synonyms, country_of_origin, colour),
+               variety = synonyms)
+    )} %>%
+    unnest(variety = strsplit(variety, ", ")) %>% # split the synonyms into multiple rows
+    unnest(variety = strsplit(variety, " / ")) %>% # and again
+    mutate(
+        variety = gsub("\\.", "", variety), # remove periods 
+        variety = gsub("\\s*\\([^\\)]+\\)", "", variety), # remove brackets and anything within
+        variety = gsub("\\s*\\[[^\\)]+\\]", "", variety) # same for square brackets
+    ) %>% 
+    mutate_all(tolower) %>% 
+    select(variety, colour, country_of_origin) %>% 
+    arrange(variety) %>% 
+    distinct
+```    
+
+The end result is `r nrow(varieties)` rows, with plenty of repeated entries to 
+accommodate for multiple names or variations in spelling.
+
+Now we join the colours with the wine data. If there are any missing values, we 
+can attempt to fill them in based on obvious clues in the variety (eg. a "Red 
+blend" can safely be assumed to be a red wine).
 
 ```{r}
 wine_colours <- wine %>% merge(
-    varieties %>% select(variety, colour),
+    variety_colours %>% select(variety, colour),
     by = "variety",
     all = TRUE
 ) %>% 
@@ -78,15 +129,71 @@ wine_colours %>%
     kable_styling(full_width = F)
 ```
 
+We still have some colours missing. The below suggests that blends are an issue:
+
 ```{r missing_colours}
-wine_colours %>% filter(is.na(colour)) %>% count(variety, sort = TRUE)
+wine_colours %>% 
+    filter(is.na(colour)) %>% 
+    count(variety, sort = TRUE) %>% 
+    head(10) %>% 
+    knitr::kable(format = "html") %>% 
+    kable_styling(full_width = F)
+```
+
+We operate under the assumption that if multiple wines are listed, the first
+wine determines the colour. For example, cabernet is red and sauvignon is white,
+but cabernet sauvignon is red. We try to classify the unclassified wines again
+but using only the first word in their varieties. We split the variety by either
+spaces or dashes.
+
+```{r blend_classification}
+blend_colours <- 
+    wine_colours %>% 
+    filter(is.na(colour)) %>% 
+    select(variety) %>% 
+    rowwise %>% 
+    mutate(first_variety = unlist(strsplit(variety, "\\-|\\ | "))[1]) %>% 
+    merge(variety_colours, by.x = "first_variety", by.y = "variety") %>% 
+    select(variety, colour)
+```
+
+Now we can rebuild the wine colours using these new blend results:
+
+```{r}
+wine_colours <- wine %>% merge(
+    variety_colours %>% select(variety, colour) %>% rbind(blend_colours),
+    by = "variety",
+    all = TRUE
+) %>% 
+    mutate(
+        colour = case_when(
+            !is.na(colour) ~ colour,
+            grepl("sparkling", variety, ignore.case = TRUE) ~ "white",
+            grepl("champagne", variety, ignore.case = TRUE) ~ "white",
+            grepl("red", variety, ignore.case = TRUE) ~ "red",
+            grepl("white", variety, ignore.case = TRUE) ~ "white",
+            grepl("rosé", variety, ignore.case = TRUE) ~ "rosé",
+            grepl("rose", variety, ignore.case = TRUE) ~ "rosé",
+            grepl("port", variety, ignore.case = TRUE) ~ "red" # technically?
+        )
+    )
+
+wine_colours %>% 
+    count(colour) %>% 
+    knitr::kable(format = "html") %>% 
+    kable_styling(full_width = F)
 ```
 
 ## Points
 ```{r points}
 wine %>% ggplot(aes(x = points)) + 
-    geom_histogram(bins = nrow(wine %>% distinct(points)))
+    geom_histogram(
+        bins = nrow(wine %>% distinct(points)),
+        colour = "white",
+        fill = "#AD1037"
+    )
 ```
+
 
 ## Text analysis
 
@@ -112,7 +219,7 @@ wine_words %>%
     head(20) %>%
     mutate(word = reorder(word, n)) %>%
     ggplot(aes(word, n)) +
-    geom_col(fill = "maroon4") +
+    geom_col(fill = "#AD1037") +
     xlab(NULL) +
     theme(text = element_text(size=16)) +
     coord_flip()
@@ -176,7 +283,7 @@ plot_ngram_frequency <- function(x) {
         head(20) %>%
         mutate(ngram = reorder(ngram, n)) %>%
         ggplot(aes(ngram, n)) +
-        geom_col(fill = "maroon4") +
+        geom_col(fill = "#AD1037") +
         xlab(NULL) +
         theme(text = element_text(size=16)) +
         coord_flip() + 
